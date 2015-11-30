@@ -7,7 +7,7 @@ namespace MoonSharp.Interpreter.REPL
 	/// </summary>
 	public class ReplInterpreter
 	{
-		Script m_Script;
+		readonly Script m_Script;
 		string m_CurrentCommand = string.Empty;
 
 		/// <summary>
@@ -16,7 +16,7 @@ namespace MoonSharp.Interpreter.REPL
 		/// <param name="script">The script.</param>
 		public ReplInterpreter(Script script)
 		{
-			this.m_Script = script;
+			m_Script = script;
 		}
 
 		/// <summary>
@@ -45,6 +45,24 @@ namespace MoonSharp.Interpreter.REPL
 		/// Gets the classic prompt (">" or ">>") given the current state of the interpreter
 		/// </summary>
 		public virtual string ClassicPrompt { get { return HasPendingCommand ? ">>" : ">"; } }
+
+		/// <summary>
+		/// Evaluate a dynamic expression.
+		/// </summary>
+		public virtual DynValue EvaluateExpression(Script script, string expression)
+		{
+			var exp = script.CreateDynamicExpression(expression);
+			return exp.Evaluate();
+		}
+
+		/// <summary>
+		/// Evaluate the Lua command string.
+		/// </summary>
+		public virtual DynValue EvaluateCommand(Script script, string command)
+		{
+			var v = script.LoadString(command, null, "stdin");
+			return script.Call(v);
+		}
 
 		/// <summary>
 		/// Evaluate a REPL command.
@@ -77,14 +95,11 @@ namespace MoonSharp.Interpreter.REPL
 				
 				if (isFirstLine && HandleDynamicExprs && m_CurrentCommand.StartsWith("?"))
 				{
-					var code = m_CurrentCommand.Substring(1);
-					var exp = m_Script.CreateDynamicExpression(code);
-					result = exp.Evaluate();
+					result = EvaluateExpression(m_Script, m_CurrentCommand.Substring(1));
 				}
 				else
 				{
-					var v = m_Script.LoadString(m_CurrentCommand, null, "stdin");
-					result = m_Script.Call(v);
+					result = EvaluateCommand(m_Script, m_CurrentCommand);
 				}
 
 				m_CurrentCommand = "";
