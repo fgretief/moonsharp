@@ -74,7 +74,14 @@ namespace MoonSharp.Interpreter.Tests
 		public static void Run(string filename)
 		{
 			TapRunner t = new TapRunner(filename);
-			t.Run();
+			try
+			{
+				t.Run();
+			}
+			catch (InterpreterException ex)
+			{
+				Assert.Fail(ex.DecoratedMessage);
+			}
 		}
 
 

@@ -81,11 +81,14 @@ namespace NUnit.Framework
 			}
 		}
 
-
+		internal static void Fail(string message)
+		{
+			throw new Exception("Test failed : " + message);
+		}
 
 		internal static void Fail()
 		{
-			Assert.IsTrue(false);
+			Fail("Assertion failed!");
 		}
 	}
 
