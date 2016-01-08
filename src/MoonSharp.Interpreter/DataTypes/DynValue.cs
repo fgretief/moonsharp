@@ -332,6 +332,65 @@ namespace MoonSharp.Interpreter
 			};
 		}
 
+		public static DynValue NewTuple(ICollection<DynValue> values)
+		{
+			if (values.Count == 0)
+				return DynValue.NewNil();
+
+			var tuple = new DynValue[values.Count];
+			values.CopyTo(tuple, 0);
+
+			if (tuple.Length == 1)
+				return tuple[0];
+
+			return new DynValue()
+			{
+				m_Object = tuple,
+				m_Type = DataType.Tuple,
+			};
+		}
+
+		public static DynValue NewTuple(IEnumerable<DynValue> values)
+		{
+			var iter = values.GetEnumerator();
+
+			if (!iter.MoveNext())
+				return DynValue.NewNil();
+
+			var first = iter.Current;
+			if (!iter.MoveNext())
+				return first;
+
+			var second = iter.Current;
+			if (!iter.MoveNext())
+				return new DynValue()
+				{
+					m_Type = DataType.Tuple,
+					m_Object = new[] { first, second },
+				};
+
+			var third = iter.Current;
+			if (!iter.MoveNext())
+				return new DynValue()
+				{
+					m_Type = DataType.Tuple,
+					m_Object = new[] { first, second, third },
+				};
+
+			var list = new List<DynValue>() { first, second, third, iter.Current };
+
+			while (iter.MoveNext())
+			{
+				list.Add(iter.Current);
+			}
+
+			return new DynValue()
+			{
+				m_Object = list.ToArray(),
+				m_Type = DataType.Tuple,
+			};
+		}
+
 		/// <summary>
 		/// Creates a new tuple initialized to the specified values - which can be potentially other tuples
 		/// </summary>
