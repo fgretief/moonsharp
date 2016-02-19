@@ -36,6 +36,17 @@ namespace MoonSharp.Interpreter
 		/// Initializes a new instance of the <see cref="InterpreterException"/> class.
 		/// </summary>
 		/// <param name="message">The message that describes the error.</param>
+		/// <param name="innerException">The inner exception of the error.</param>
+		protected InterpreterException(string message, Exception innerException)
+			: base(message, innerException)
+		{
+
+		}
+
+		/// <summary>
+		/// Initializes a new instance of the <see cref="InterpreterException"/> class.
+		/// </summary>
+		/// <param name="message">The message that describes the error.</param>
 		protected InterpreterException(string message)
 			: base(message)
 		{
