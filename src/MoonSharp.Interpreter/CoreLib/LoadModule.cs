@@ -51,7 +51,9 @@ namespace MoonSharp.Interpreter.CoreLib
 			package.Table.Set("searchers", DynValue.NewTable(searchers));
 
 			searchers.Append(DynValue.NewCallback(PreloadSearcher));
+#if !PCL
 			searchers.Append(DynValue.NewCallback(LuaPathSearcher));
+			searchers.Append(DynValue.NewCallback(ResourceSearcher));
 
 			var path = @"!\lua\"              + @"?.lua;" 
 					 + @"!\lua\"              + @"?\init.lua;" 
@@ -66,6 +68,11 @@ namespace MoonSharp.Interpreter.CoreLib
 			var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
 			var exePath = Path.GetDirectoryName(assembly.Location);
 			package.Table.Set("path", DynValue.NewString(path.Replace("!", exePath)));
+
+			var respath = @"!|Scripts.?.lua"; // ; seperated list of resource templates: (asm)|(path)
+			var asmPath = assembly.FullName.Split(',')[0];
+			package.Table.Set("respath", DynValue.NewString(respath.Replace("!", asmPath)));
+#endif
 		}
 
 		// load (ld [, source [, mode [, env]]])
@@ -275,6 +282,84 @@ function(modulename)
 	return res;
 end";
 
+#if !PCL
+		private static DynValue ResourceSearcher(ScriptExecutionContext executionContext, CallbackArguments args)
+		{
+			var name = args.AsType(0, "ResourceSearcher", DataType.String).String;
+			var script = executionContext.GetScript();
+
+			var rpath = script.Globals.Get("package", "respath").String;
+			if (rpath == null)
+				throw new ScriptRuntimeException("'package.respath' must be a string");
+
+			string resourceFile = null;
+			Assembly resourceAssembly = null;
+			var errors = new StringBuilder();
+
+			var templates = rpath.Split(';');
+			foreach (var template in templates)
+			{
+				var fields = template.Split('|');
+				
+				if (fields.Length < 2)
+				{
+					errors.AppendFormat("\n\tinvalid template string '{0}', no '|' separator found", template);
+					continue;
+				}
+
+				var asmName = fields[0];
+				var resPath = fields[1].Replace("?", name);
+
+				try
+				{
+					resourceAssembly = Assembly.Load(asmName);
+				}
+				catch (Exception)
+				{
+					resourceAssembly = null;
+				}
+
+				if (resourceAssembly == null)
+				{
+					errors.AppendFormat("\n\tno assembly '{0}'", asmName);
+					continue;
+				}
+				
+				foreach (var resName in resourceAssembly.GetManifestResourceNames())
+				{
+					if (resName.EndsWith(resPath))
+					{
+						resourceFile = resName;
+						break;
+					}
+				}
+
+				if (resourceFile == null)
+				{
+					errors.AppendFormat("\n\tno resource '{0}' found in assembly '{1}'", resPath, asmName);
+					continue;
+				}
+
+				break; // found resource in assembly
+			}
+
+			if (resourceFile == null)
+				return DynValue.NewString(errors.ToString());
+
+			try
+			{
+				using (var stream = resourceAssembly.GetManifestResourceStream(resourceFile))
+				{
+					return script.LoadStream(stream, codeFriendlyName: "resource:" + resourceFile);
+				}
+			}
+			catch (InterpreterException ex)
+			{
+				var msg = String.Format("error loading module '{0}' from resource '{1}':\n\t{2}", name, resourceFile, ex.DecoratedMessage);
+				throw new ScriptRuntimeException(msg, ex);
+			}
+		}
+	
 		private static DynValue LuaPathSearcher(ScriptExecutionContext executionContext, CallbackArguments args)
 		{
 			var name = args.AsType(0, "LuaPathSearcher", DataType.String).String;
@@ -319,7 +404,7 @@ end";
 				throw new ScriptRuntimeException(msg, ex);
 			}
 		}
-
+#endif
 		private static DynValue PreloadSearcher(ScriptExecutionContext executionContext, CallbackArguments args)
 		{
 			var name = args.AsType(0, "PreloadSearcher", DataType.String).String;
