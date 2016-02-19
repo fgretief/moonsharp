@@ -1,6 +1,14 @@
 ﻿// Disable warnings about XML documentation
 #pragma warning disable 1591
 
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using MoonSharp.Interpreter.Execution;
 
 namespace MoonSharp.Interpreter.CoreLib
 {
@@ -12,12 +20,13 @@ namespace MoonSharp.Interpreter.CoreLib
 	{
 		public static void MoonSharpInit(Table globalTable, Table ioTable)
 		{
-			DynValue package = globalTable.Get("package");
+			var S = globalTable.OwnerScript;
 
-			if (package.IsNil())
+			var package = globalTable.RawGet("package");
+			if (package == null)
 			{
-				package = DynValue.NewTable(globalTable.OwnerScript);
-				globalTable["package"] = package;
+				package = DynValue.NewTable(S);
+				globalTable.Set("package", package);
 			}
 			else if (package.Type != DataType.Table)
 			{
@@ -31,9 +40,33 @@ namespace MoonSharp.Interpreter.CoreLib
 #endif
 
 			package.Table.Set("config", DynValue.NewString(cfg));
+
+			var loaded = S.Registry.GetSubTable("_LOADED");
+			package.Table.Set("loaded", DynValue.NewTable(loaded));
+
+			var preload = S.Registry.GetSubTable("_PRELOAD");
+			package.Table.Set("preload", DynValue.NewTable(preload));
+
+			var searchers = new Table(S);
+			package.Table.Set("searchers", DynValue.NewTable(searchers));
+
+			searchers.Append(DynValue.NewCallback(PreloadSearcher));
+			searchers.Append(DynValue.NewCallback(LuaPathSearcher));
+
+			var path = @"!\lua\"              + @"?.lua;" 
+					 + @"!\lua\"              + @"?\init.lua;" 
+					 + @"!\"                  + @"?.lua;" 
+					 + @"!\"                  + @"?\init.lua;" 
+					 + @"!\..\share\lua\5.2\" + @"?.lua;" 
+					 + @"!\..\share\lua\5.2\" + @"?\init.lua;" 
+					 + @".\"                  + @"?.lua;"  
+					 + @".\"                  + @"?\init.lua"
+					 ;
+
+			var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+			var exePath = Path.GetDirectoryName(assembly.Location);
+			package.Table.Set("path", DynValue.NewString(path.Replace("!", exePath)));
 		}
-
-
 
 		// load (ld [, source [, mode [, env]]])
 		// ----------------------------------------------------------------
@@ -242,7 +275,126 @@ function(modulename)
 	return res;
 end";
 
+		private static DynValue LuaPathSearcher(ScriptExecutionContext executionContext, CallbackArguments args)
+		{
+			var name = args.AsType(0, "LuaPathSearcher", DataType.String).String;
+			var script = executionContext.GetScript();
 
+			var path = script.Globals.Get("package", "path").String;
+			if (path == null)
+				throw new ScriptRuntimeException("'package.path' must be a string");
 
+			name = name.Replace('.', '\\'); /* replace . by directory separators */
+
+			FileStream stream = null;
+			var errors = new StringBuilder();
+			
+			var templates = path.Split(';');
+			foreach (var template in templates)
+			{
+				var filename = template.Replace("?", name);
+
+				if (File.Exists(filename))
+				{
+					stream = File.OpenRead(filename);
+					break;
+				}
+
+				errors.AppendFormat("\n\tno file '{0}'", filename);
+			}
+
+			if (stream == null)
+				return DynValue.NewString(errors); /* module not found in this path */
+
+			try
+			{
+				using (stream)
+				{
+					return script.LoadStream(stream, codeFriendlyName: stream.Name);
+				}
+			}
+			catch (InterpreterException ex)
+			{
+				var msg = String.Format("error loading module '{0}' from file '{1}':\n\t{2}", name, stream.Name, ex.DecoratedMessage);
+				throw new ScriptRuntimeException(msg, ex);
+			}
+		}
+
+		private static DynValue PreloadSearcher(ScriptExecutionContext executionContext, CallbackArguments args)
+		{
+			var name = args.AsType(0, "PreloadSearcher", DataType.String).String;
+			var script = executionContext.GetScript();
+
+			var preload = script.Registry.Get("_PRELOAD").Table;
+			if (preload == null)
+				throw new ScriptRuntimeException("'package.preload' must be a table");
+
+			var result = preload.RawGet(name);
+			if (result != null)
+				return result;
+			
+			return DynValue.NewString("\n\tno field package.preload['{0}']", name);
+		}
+
+		private static DynValue FindLoader(ScriptExecutionContext executionContext, DynValue moduleName)
+		{
+			var script = executionContext.GetScript();
+
+			var package = script.Globals.Get("package").Table;
+			if (package == null)
+				throw new ScriptRuntimeException("'package' must be a table");
+			
+			var searchers = package.Get("searchers").Table;
+			if (searchers == null)
+				throw new ScriptRuntimeException("'package.searchers' must be a table");
+
+			var sb = new StringBuilder();
+
+			for (int i = 1; ; ++i)
+			{
+				var searcher = searchers.RawGet(i);
+				if (searcher == null) /* no more searchers? */
+					throw new ScriptRuntimeException("module '{0}' not found:{1}", moduleName.String, sb);
+
+				var result = script.Call(searcher, moduleName);
+
+				if (result.Type == DataType.Function ||
+					result.Type == DataType.ClrFunction)
+					return result;
+
+				if (result.Type == DataType.String)
+					sb.Append(result.String);
+			}
+		}
+
+		[MoonSharpModuleMethod]
+		public static DynValue __require_via_loaders(ScriptExecutionContext executionContext, CallbackArguments args)
+		{
+			var S = executionContext.GetScript();
+			var name = args.AsType(0, "__require_with_loaders", DataType.String);
+
+			//Console.WriteLine("Loading module: {0}", name);
+
+			var value = S.Registry.RawGet("_LOADED");
+			if (value == null)
+				S.Registry.Set("_LOADED", value = DynValue.NewTable(new Table(S)));
+			var loaded = value.Table;
+			
+			var m = loaded.Get(name);
+			if (m.CastToBool()) // is it there?
+				return m; // package is already loaded           
+			// else must load the package
+
+			var loader = FindLoader(executionContext, name);
+
+			m = S.Call(loader, args[0]);
+			m = m.ToScalar();
+			if (!m.IsNil())
+				loaded.Set(name, m);
+			if (loaded.Get(name).IsNil()) // module set no value
+				loaded.Set(name, DynValue.True);
+
+			return m;
+		}
 	}
 }

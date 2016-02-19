@@ -684,5 +684,19 @@ namespace MoonSharp.Interpreter
 				return m_Values.Select(n => n.Value);
 			}
 		}
+
+		/// <summary>
+		/// Ensure that the sub-table exist and return it
+		/// </summary>
+		/// <param name="key">The key of the sub-table.</param>
+		public Table GetSubTable(string key)
+		{
+			var result = RawGet(key);
+			if (result == null)
+				Set(key, result = DynValue.NewTable(OwnerScript));
+			if (result.Type == DataType.Table)
+				return result.Table;
+			throw new ScriptRuntimeException("Key '{0}' did not point to a table, got {1}", key, result.Type);
+		}
 	}
 }

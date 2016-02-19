@@ -178,37 +178,11 @@ namespace MoonSharp.Interpreter
 			}
 			else
 			{
-				Table table = null;
+				var table = gtable.GetSubTable(attr.Namespace);
 
-				DynValue found = gtable.Get(attr.Namespace);
-
-				if (found.Type == DataType.Table)
-				{
-					table = found.Table;
-				}
-				else
-				{
-					table = new Table(gtable.OwnerScript);
-					gtable.Set(attr.Namespace, DynValue.NewTable(table));
-				}
-
-
-				DynValue package = gtable.RawGet("package");
-
-				if (package == null || package.Type != DataType.Table)
-				{
-					gtable.Set("package", package = DynValue.NewTable(gtable.OwnerScript));
-				}
-
-
-				DynValue loaded = package.Table.RawGet("loaded");
-
-				if (loaded == null || loaded.Type != DataType.Table)
-				{
-					package.Table.Set("loaded", loaded = DynValue.NewTable(gtable.OwnerScript));
-				}
-
-				loaded.Table.Set(attr.Namespace, DynValue.NewTable(table));
+				gtable.OwnerScript.Registry
+					.GetSubTable("_LOADED")
+					.Set(attr.Namespace, DynValue.NewTable(table));
 
 				return table;
 			}
