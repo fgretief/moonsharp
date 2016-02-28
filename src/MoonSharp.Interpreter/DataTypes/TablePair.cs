@@ -1,21 +1,30 @@
-﻿
+﻿using System.Diagnostics;
+
 namespace MoonSharp.Interpreter
 {
 	/// <summary>
 	/// A class representing a key/value pair for Table use
 	/// </summary>
+	[DebuggerDisplay("{Value}", Name = "{Key}", Type = "{Value.Type}")]
 	public struct TablePair
 	{
-		private static TablePair s_NilNode = new TablePair(DynValue.Nil, DynValue.Nil);
-		private DynValue key, value;
+		/// <summary>
+		/// The Nil pair
+		/// </summary>
+		public static readonly TablePair Nil = new TablePair(DynValue.Nil, DynValue.Nil);
+
+		[DebuggerBrowsable(DebuggerBrowsableState.Never)]
+		private readonly DynValue _key;
+
+		[DebuggerBrowsable(DebuggerBrowsableState.Never)]
+		private readonly DynValue _value;
 
 		/// <summary>
 		/// Gets the key.
 		/// </summary>
-		public DynValue Key 
+		public DynValue Key
 		{
-			get { return key; }
-			private set { Key = key; }
+			get { return _key; }
 		}
 
 		/// <summary>
@@ -23,25 +32,18 @@ namespace MoonSharp.Interpreter
 		/// </summary>
 		public DynValue Value
 		{
-			get { return value; }
-			set { if (key.IsNotNil()) Value = value; }
+			get { return _value; }
 		}
-
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="TablePair"/> struct.
 		/// </summary>
 		/// <param name="key">The key.</param>
 		/// <param name="val">The value.</param>
-		public TablePair(DynValue key, DynValue val) 
+		public TablePair(DynValue key, DynValue val)
 		{
-			this.key = key;
-			this.value = val;
+			_key = key;
+			_value = val;
 		}
-
-		/// <summary>
-		/// Gets the nil pair
-		/// </summary>
-		public static TablePair Nil { get { return s_NilNode; } }
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using MoonSharp.Interpreter.DataStructs;
 
@@ -7,6 +8,7 @@ namespace MoonSharp.Interpreter
 	/// <summary>
 	/// A class representing a Lua table.
 	/// </summary>
+	[DebuggerTypeProxy(typeof(TableDebugView))]
 	public class Table : RefIdObject, IScriptPrivateResource
 	{
 		readonly LinkedList<TablePair> m_Values;
@@ -682,6 +684,49 @@ namespace MoonSharp.Interpreter
 			get
 			{
 				return m_Values.Select(n => n.Value);
+			}
+		}
+
+		public class TableDebugView
+		{
+			[DebuggerBrowsable(DebuggerBrowsableState.Never)]
+			public static int MaxDebugItems = 1024;
+
+			[DebuggerBrowsable(DebuggerBrowsableState.Never)]
+			private readonly Table _table;
+
+			public TableDebugView(Table table)
+			{
+				_table = table;
+			}
+
+			[DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
+			public TablePair[] Items
+			{
+				get
+				{
+					return _table.m_Values.Take(MaxDebugItems).ToArray();
+				}
+			}
+
+			public int Count
+			{
+				get { return _table.m_Values.Count; }
+			}
+
+			public int Length
+			{
+				get { return _table.Length; }
+			}
+
+			public Table MetaTable
+			{
+				get { return _table.MetaTable; }
+			}
+
+			public Script OwnerScript
+			{
+				get { return _table.OwnerScript; }
 			}
 		}
 	}
